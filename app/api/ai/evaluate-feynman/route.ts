@@ -67,13 +67,18 @@ Devuelve SOLO un JSON válido con esta estructura exacta:
   "overallFeedback": "Resumen general del razonamiento y recomendaciones"
 }`
 
+    // Build options string safely
+    const optionsText = options
+      .map((opt, index) => {
+        const letter = String.fromCharCode(65 + index) // A, B, C, D...
+        return `${letter}) ${opt}`
+      })
+      .join('\n')
+
     const userPrompt = `Pregunta: "${questionPrompt}"
 
 Opciones:
-A) ${options[0]}
-B) ${options[1]}
-C) ${options[2]}
-D) ${options[3]}
+${optionsText}
 
 Respuesta correcta: ${correctAnswer}
 Respuesta del estudiante: ${userAnswer}
@@ -134,6 +139,13 @@ Evalúa el razonamiento del estudiante usando ambas técnicas y proporciona feed
 
     // Validate structure
     if (!parsedResponse.technique1Feedback || !parsedResponse.technique2Feedback || !parsedResponse.overallFeedback) {
+      console.error('AI Evaluate Feynman: Invalid response structure:', {
+        hasTechnique1: !!parsedResponse.technique1Feedback,
+        hasTechnique2: !!parsedResponse.technique2Feedback,
+        hasOverall: !!parsedResponse.overallFeedback,
+        keys: Object.keys(parsedResponse),
+        response: parsedResponse
+      })
       return NextResponse.json(
         { error: 'Invalid response structure from AI - missing required fields' },
         { status: 500 }
@@ -141,14 +153,20 @@ Evalúa el razonamiento del estudiante usando ambas técnicas y proporciona feed
     }
 
     return NextResponse.json({
-      technique1Feedback: parsedResponse.technique1Feedback.trim(),
-      technique2Feedback: parsedResponse.technique2Feedback.trim(),
-      overallFeedback: parsedResponse.overallFeedback.trim(),
+      technique1Feedback: String(parsedResponse.technique1Feedback).trim(),
+      technique2Feedback: String(parsedResponse.technique2Feedback).trim(),
+      overallFeedback: String(parsedResponse.overallFeedback).trim(),
     })
   } catch (error) {
     console.error('AI Evaluate Feynman: Error:', error)
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
+    const errorStack = error instanceof Error ? error.stack : undefined
+    console.error('AI Evaluate Feynman: Error details:', { errorMessage, errorStack })
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { 
+        error: 'Internal server error',
+        message: process.env.NODE_ENV === 'development' ? errorMessage : undefined
+      },
       { status: 500 }
     )
   }
