@@ -25,6 +25,13 @@ type Attempt = {
     topic_name: string | null
     subtopic_name: string | null
   }
+  feynman_reasonings?: Array<{
+    id: string
+    user_reasoning: string
+    ai_feedback: string | null
+    technique_1_feedback: string | null
+    technique_2_feedback: string | null
+  }> | null
 }
 
 type DashboardErroresClientProps = {
@@ -47,11 +54,19 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
   // Debug: log attempts on mount and when they change
   useEffect(() => {
     console.log('DashboardErroresClient: Received attempts:', attempts.length)
+    console.log('DashboardErroresClient: initialAttempts:', initialAttempts?.length || 0)
     if (attempts.length === 0 && initialAttempts && initialAttempts.length > 0) {
       console.warn('DashboardErroresClient: initialAttempts has data but attempts is empty!')
       setAttempts(initialAttempts)
     }
-  }, [initialAttempts])
+    // Debug feynman_reasonings
+    if (attempts.length > 0) {
+      const attemptsWithFeynman = attempts.filter(a => 
+        a.feynman_reasonings && Array.isArray(a.feynman_reasonings) && a.feynman_reasonings.length > 0
+      )
+      console.log('DashboardErroresClient: Attempts with feynman_reasonings:', attemptsWithFeynman.length)
+    }
+  }, [initialAttempts, attempts])
 
   // Get unique values for filters
   const uniqueRoutes = Array.from(new Set(attempts.map(a => a.route_name).filter((r): r is string => Boolean(r))))
@@ -329,6 +344,12 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[180px] max-w-[220px]">
                       Conclusión
                     </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[200px] max-w-[250px]">
+                      🧠 Razonamiento
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[200px] max-w-[250px]">
+                      🤖 Feedback Feynman
+                    </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Acciones
                     </th>
@@ -434,6 +455,37 @@ vi. ¿Cuál sería tu plan de acción en un futuro para lidiar con situaciones s
                                 {attempt.conclusion || 'Sin conclusión'}
                               </span>
                             </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 border-r min-w-[200px] max-w-[250px]">
+                          {attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 ? (
+                            <div className="max-h-24 overflow-y-auto text-xs">
+                              <span className="whitespace-pre-wrap break-words italic text-indigo-700">
+                                {attempt.feynman_reasonings[0].user_reasoning}
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 italic text-xs">Sin razonamiento</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 border-r min-w-[200px] max-w-[250px]">
+                          {attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].ai_feedback ? (
+                            <div className="space-y-2">
+                              <div className="max-h-16 overflow-y-auto text-xs">
+                                <p className="font-semibold text-blue-700 mb-1">Técnica 1:</p>
+                                <p className="text-gray-700 break-words">{attempt.feynman_reasonings[0].technique_1_feedback || 'N/A'}</p>
+                              </div>
+                              <div className="max-h-16 overflow-y-auto text-xs">
+                                <p className="font-semibold text-purple-700 mb-1">Técnica 2:</p>
+                                <p className="text-gray-700 break-words">{attempt.feynman_reasonings[0].technique_2_feedback || 'N/A'}</p>
+                              </div>
+                              <div className="max-h-16 overflow-y-auto text-xs">
+                                <p className="font-semibold text-indigo-700 mb-1">Resumen:</p>
+                                <p className="text-gray-700 break-words">{attempt.feynman_reasonings[0].ai_feedback}</p>
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 italic text-xs">Sin feedback</span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -611,6 +663,35 @@ vi. ¿Cuál sería tu plan de acción en un futuro para lidiar con situaciones s
                 <div className="mb-6 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-xl p-6 border-l-4 border-blue-500">
                   <h3 className="text-lg font-bold text-gray-900 mb-2">Explicación:</h3>
                   <p className="text-gray-800 leading-relaxed">{selectedAttempt.questions.explanation}</p>
+                </div>
+              )}
+
+              {/* Feynman Reasoning and Feedback */}
+              {selectedAttempt.feynman_reasonings && selectedAttempt.feynman_reasonings.length > 0 && (
+                <div className="mb-6 space-y-4">
+                  <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border-l-4 border-indigo-500">
+                    <h3 className="text-lg font-bold text-gray-900 mb-2 flex items-center gap-2">
+                      <span>🧠</span> Tu Razonamiento
+                    </h3>
+                    <p className="text-gray-800 leading-relaxed italic">{selectedAttempt.feynman_reasonings[0].user_reasoning}</p>
+                  </div>
+
+                  {selectedAttempt.feynman_reasonings[0].ai_feedback && (
+                    <div className="space-y-3">
+                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border-l-4 border-blue-500">
+                        <h3 className="text-lg font-bold text-blue-700 mb-2">Técnica 1: Descarte de Primeros Principios</h3>
+                        <p className="text-gray-800 leading-relaxed">{selectedAttempt.feynman_reasonings[0].technique_1_feedback || 'N/A'}</p>
+                      </div>
+                      <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-6 border-l-4 border-purple-500">
+                        <h3 className="text-lg font-bold text-purple-700 mb-2">Técnica 2: Reverse Engineering del Error</h3>
+                        <p className="text-gray-800 leading-relaxed">{selectedAttempt.feynman_reasonings[0].technique_2_feedback || 'N/A'}</p>
+                      </div>
+                      <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-6 border-l-4 border-indigo-500">
+                        <h3 className="text-lg font-bold text-indigo-700 mb-2">Resumen y Recomendaciones</h3>
+                        <p className="text-gray-800 leading-relaxed">{selectedAttempt.feynman_reasonings[0].ai_feedback}</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 

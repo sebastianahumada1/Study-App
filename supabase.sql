@@ -147,6 +147,17 @@ BEGIN
 END $$;
 
 -- Study Routes tables
+-- Feynman Reasonings table
+CREATE TABLE IF NOT EXISTS feynman_reasonings (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  attempt_id UUID NOT NULL REFERENCES attempts(id) ON DELETE CASCADE,
+  user_reasoning TEXT NOT NULL,
+  ai_feedback TEXT,
+  technique_1_feedback TEXT,
+  technique_2_feedback TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS study_routes (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -243,6 +254,7 @@ CREATE INDEX IF NOT EXISTS idx_attempts_question_id ON attempts(question_id);
 CREATE INDEX IF NOT EXISTS idx_attempts_created_at ON attempts(created_at);
 CREATE INDEX IF NOT EXISTS idx_attempts_source ON attempts(source);
 CREATE INDEX IF NOT EXISTS idx_attempts_session_id ON attempts(session_id);
+CREATE INDEX IF NOT EXISTS idx_feynman_reasonings_attempt_id ON feynman_reasonings(attempt_id);
 CREATE INDEX IF NOT EXISTS idx_study_routes_user_id ON study_routes(user_id);
 CREATE INDEX IF NOT EXISTS idx_study_route_items_route_id ON study_route_items(route_id);
 CREATE INDEX IF NOT EXISTS idx_study_route_items_parent_id ON study_route_items(parent_id);
@@ -256,6 +268,7 @@ CREATE INDEX IF NOT EXISTS idx_study_planner_day ON study_planner(day_of_week);
 -- Enable RLS on all tables
 ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE attempts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE feynman_reasonings ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_routes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_route_items ENABLE ROW LEVEL SECURITY;
 ALTER TABLE study_planner ENABLE ROW LEVEL SECURITY;
@@ -266,6 +279,9 @@ DROP POLICY IF EXISTS "Authenticated users can insert questions" ON questions;
 DROP POLICY IF EXISTS "Authenticated users can update questions" ON questions;
 DROP POLICY IF EXISTS "Authenticated users can delete questions" ON questions;
 DROP POLICY IF EXISTS "Users can view own attempts" ON attempts;
+DROP POLICY IF EXISTS "Users can view own feynman reasonings" ON feynman_reasonings;
+DROP POLICY IF EXISTS "Users can insert own feynman reasonings" ON feynman_reasonings;
+DROP POLICY IF EXISTS "Users can update own feynman reasonings" ON feynman_reasonings;
 DROP POLICY IF EXISTS "Users can insert own attempts" ON attempts;
 DROP POLICY IF EXISTS "Users can manage own study routes" ON study_routes;
 DROP POLICY IF EXISTS "Users can manage own route items" ON study_route_items;
@@ -297,6 +313,44 @@ CREATE POLICY "Users can view own attempts"
 CREATE POLICY "Users can insert own attempts"
   ON attempts FOR INSERT
   WITH CHECK (auth.uid() = user_id);
+
+-- Feynman Reasonings: Users can only view/manage their own reasonings
+CREATE POLICY "Users can view own feynman reasonings"
+  ON feynman_reasonings FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM attempts 
+      WHERE attempts.id = feynman_reasonings.attempt_id 
+      AND attempts.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can insert own feynman reasonings"
+  ON feynman_reasonings FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM attempts 
+      WHERE attempts.id = feynman_reasonings.attempt_id 
+      AND attempts.user_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can update own feynman reasonings"
+  ON feynman_reasonings FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM attempts 
+      WHERE attempts.id = feynman_reasonings.attempt_id 
+      AND attempts.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM attempts 
+      WHERE attempts.id = feynman_reasonings.attempt_id 
+      AND attempts.user_id = auth.uid()
+    )
+  );
 
 -- Study Routes: Users can only manage their own routes
 CREATE POLICY "Users can manage own study routes"

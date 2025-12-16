@@ -73,6 +73,13 @@ export default async function DashboardErroresPage() {
         options,
         topic_name,
         subtopic_name
+      ),
+      feynman_reasonings (
+        id,
+        user_reasoning,
+        ai_feedback,
+        technique_1_feedback,
+        technique_2_feedback
       )
     `)
     .eq('user_id', user.id)
@@ -95,23 +102,35 @@ export default async function DashboardErroresPage() {
     .map((attempt: any) => {
       // Find route name based on topic_name or subtopic_name
       let routeName = 'Sin ruta'
-      if (attempt.questions.subtopic_name) {
+      if (attempt.questions?.subtopic_name) {
         routeName = subtopicToRouteMap.get(attempt.questions.subtopic_name) || 'Sin ruta'
-      } else if (attempt.questions.topic_name) {
+      } else if (attempt.questions?.topic_name) {
         routeName = topicToRouteMap.get(attempt.questions.topic_name) || 'Sin ruta'
       }
 
       return {
         ...attempt,
         route_name: routeName,
-        questions: {
+        questions: attempt.questions ? {
           ...attempt.questions,
-        },
+        } : null,
+        feynman_reasonings: attempt.feynman_reasonings || null,
       }
     })
 
   console.log('DashboardErrores: Raw attempts count:', attempts?.length || 0)
   console.log('DashboardErrores: Transformed attempts count:', transformedAttempts.length)
+  
+  // Debug: Check if feynman_reasonings are present
+  if (attempts && attempts.length > 0) {
+    const attemptsWithFeynman = attempts.filter((a: any) => 
+      a.feynman_reasonings && Array.isArray(a.feynman_reasonings) && a.feynman_reasonings.length > 0
+    )
+    console.log('DashboardErrores: Attempts with feynman_reasonings:', attemptsWithFeynman.length)
+    if (attemptsWithFeynman.length > 0) {
+      console.log('DashboardErrores: Sample feynman_reasoning:', attemptsWithFeynman[0].feynman_reasonings)
+    }
+  }
 
   return (
     <DashboardErroresClient attempts={transformedAttempts} />

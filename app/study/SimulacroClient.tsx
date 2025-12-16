@@ -73,6 +73,16 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
     timeSpent: number
   }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [feynmanEnabled, setFeynmanEnabled] = useState(false)
+  const [reasonings, setReasonings] = useState<Record<string, string>>({})
+  const [feynmanFeedbacks, setFeynmanFeedbacks] = useState<Record<string, {
+    technique1Feedback: string
+    technique2Feedback: string
+    overallFeedback: string
+  }>>({})
+  const [loadingFeedbacks, setLoadingFeedbacks] = useState(false)
+  const [feedbackProgress, setFeedbackProgress] = useState({ completed: 0, total: 0 })
+  const [attemptIds, setAttemptIds] = useState<Record<string, string>>({})
 
   // Get selected route
   const selectedRoute = routes.find(r => r.id === selectedRouteId)
@@ -355,6 +365,12 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
       setTimeLeft(timePerQuestion)
       setState('running')
       setResults([])
+      // Reset Feynman states
+      setReasonings({})
+      setFeynmanFeedbacks({})
+      setAttemptIds({})
+      setLoadingFeedbacks(false)
+      setFeedbackProgress({ completed: 0, total: 0 })
     } catch (error) {
       console.error('Simulacro: Error starting:', error)
       alert('Error al iniciar el simulacro')
@@ -399,9 +415,19 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
     }]
     setResults(newResults)
 
-    // Save to database
+    // Save to database and collect attempt IDs for feedback generation
+    const currentAttemptIds: Record<string, string> = { ...attemptIds }
     if (selectedOption) {
-      await saveAttempt(currentQuestion.id, selectedOption, isCorrect, timeSpent)
+      const attemptId = await saveAttempt(currentQuestion.id, selectedOption, isCorrect, timeSpent)
+      // Save attempt ID for later feedback generation
+      if (attemptId) {
+        currentAttemptIds[currentQuestion.id] = attemptId
+        setAttemptIds(prev => ({ ...prev, [currentQuestion.id]: attemptId }))
+        // Save reasoning if Feynman is enabled
+        if (feynmanEnabled && reasonings[currentQuestion.id]) {
+          await saveReasoning(attemptId, reasonings[currentQuestion.id])
+        }
+      }
     }
 
     // Move to next question or finish
@@ -411,20 +437,28 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
       setTimeLeft(timePerQuestion)
     } else {
       setState('completed')
+      // Generate feedbacks if Feynman is enabled
+      // Pass newResults and currentAttemptIds directly to avoid stale state
+      if (feynmanEnabled) {
+        await generateFeedbacks(newResults, currentAttemptIds)
+      }
     }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!selectedOption || !questions[currentQuestionIndex]) return
+    if (feynmanEnabled && (!reasonings[currentQuestion.id] || reasonings[currentQuestion.id].length < 20)) {
+      return
+    }
 
     await handleAutoSubmit()
   }
 
-  const saveAttempt = async (questionId: string, userAnswer: string, isCorrect: boolean, timeSpent: number) => {
+  const saveAttempt = async (questionId: string, userAnswer: string, isCorrect: boolean, timeSpent: number): Promise<string | null> => {
     try {
       const supabase = createClient()
-      await supabase.from('attempts').insert({
+      const { data, error } = await supabase.from('attempts').insert({
         user_id: userId,
         question_id: questionId,
         is_correct: isCorrect,
@@ -432,9 +466,219 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
         source: 'simulacro',
         session_id: sessionId,
         time_spent: timeSpent,
-      })
+      }).select('id').single()
+
+      if (error) {
+        console.error('Simulacro: Error saving attempt:', error)
+        return null
+      }
+
+      return data?.id || null
     } catch (error) {
       console.error('Simulacro: Error saving attempt:', error)
+      return null
+    }
+  }
+
+  const saveReasoning = async (attemptId: string, reasoning: string) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase.from('feynman_reasonings').insert({
+        attempt_id: attemptId,
+        user_reasoning: reasoning,
+      }).select()
+      
+      if (error) {
+        console.error('Simulacro: Error saving reasoning:', error)
+        console.error('Simulacro: Attempt ID:', attemptId)
+      } else {
+        console.log('Simulacro: Successfully saved reasoning for attempt:', attemptId)
+        console.log('Simulacro: Inserted reasoning ID:', data?.[0]?.id)
+      }
+    } catch (error) {
+      console.error('Simulacro: Exception saving reasoning:', error)
+    }
+  }
+
+  const generateFeedbacks = async (
+    currentResults?: Array<{
+      questionId: string
+      isCorrect: boolean
+      userAnswer: string
+      timeSpent: number
+    }>,
+    currentAttemptIdsParam?: Record<string, string>
+  ) => {
+    setLoadingFeedbacks(true)
+    console.log('Simulacro: Starting feedback generation...')
+    
+    // Use provided results or fallback to state
+    const resultsToUse = currentResults || results
+    const attemptIdsToUse = currentAttemptIdsParam || attemptIds
+    
+    console.log('Simulacro: Using results:', resultsToUse.length)
+    console.log('Simulacro: Using attempt IDs:', Object.keys(attemptIdsToUse).length)
+    console.log('Simulacro: Reasonings keys:', Object.keys(reasonings))
+    console.log('Simulacro: Reasonings:', reasonings)
+
+    try {
+      // Filter results that have reasoning
+      const resultsWithReasoning = resultsToUse.filter(result => {
+        const question = questions.find(q => q.id === result.questionId)
+        const reasoning = reasonings[result.questionId]
+        console.log(`Simulacro: Checking result ${result.questionId}:`, {
+          hasQuestion: !!question,
+          hasReasoning: !!reasoning,
+          reasoningLength: reasoning?.length
+        })
+        return question && reasoning
+      })
+
+      console.log('Simulacro: Results with reasoning:', resultsWithReasoning.length)
+
+      if (resultsWithReasoning.length === 0) {
+        console.log('Simulacro: No results with reasoning, skipping feedback generation')
+        setLoadingFeedbacks(false)
+        setFeedbackProgress({ completed: 0, total: 0 })
+        return
+      }
+
+      // Initialize progress
+      setFeedbackProgress({ completed: 0, total: resultsWithReasoning.length })
+
+      // Generate feedback for all questions in parallel
+      const feedbackPromises = resultsWithReasoning.map(async (result) => {
+        const question = questions.find(q => q.id === result.questionId)!
+        const reasoning = reasonings[result.questionId]
+
+        try {
+          console.log('Simulacro: Generating feedback for question', result.questionId)
+          
+          const response = await fetch('/api/ai/evaluate-feynman', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              questionPrompt: question.prompt,
+              userAnswer: result.userAnswer,
+              correctAnswer: question.answer_key,
+              options: question.options || [],
+              userReasoning: reasoning,
+              isCorrect: result.isCorrect,
+            }),
+          })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            console.error('Simulacro: Error generating feedback for question', result.questionId, errorText)
+            return { questionId: result.questionId, feedback: null, error: true }
+          }
+
+          const feedback = await response.json()
+          console.log('Simulacro: Feedback received for question', result.questionId, feedback)
+
+          // Validate feedback structure
+          if (!feedback.technique1Feedback || !feedback.technique2Feedback || !feedback.overallFeedback) {
+            console.error('Simulacro: Invalid feedback structure received:', feedback)
+            return { questionId: result.questionId, feedback: null, error: true }
+          }
+
+          // Save feedback to database
+          const attemptId = attemptIdsToUse[result.questionId]
+          if (attemptId) {
+            console.log('Simulacro: Saving feedback to database for attempt:', attemptId)
+            try {
+              await updateReasoningFeedback(attemptId, feedback)
+            } catch (dbError) {
+              console.error('Simulacro: Error saving feedback to database:', dbError)
+            }
+          } else {
+            console.warn('Simulacro: No attempt ID found for question:', result.questionId)
+            console.warn('Simulacro: Available attempt IDs:', Object.keys(attemptIds))
+          }
+
+          // Update state immediately as feedback arrives (using functional update to avoid stale closures)
+          setFeynmanFeedbacks(prev => {
+            const updated = {
+              ...prev,
+              [result.questionId]: feedback
+            }
+            const completedCount = Object.keys(updated).length
+            console.log('Simulacro: Updated feynmanFeedbacks state, total feedbacks:', completedCount)
+            console.log('Simulacro: Feedback keys:', Object.keys(updated))
+            return updated
+          })
+          
+          // Update progress separately
+          setFeedbackProgress(prevProgress => {
+            const newCompleted = prevProgress.completed + 1
+            console.log('Simulacro: Progress updated:', newCompleted, '/', prevProgress.total)
+            return {
+              ...prevProgress,
+              completed: newCompleted
+            }
+          })
+
+          return { questionId: result.questionId, feedback, error: false }
+        } catch (error) {
+          console.error('Simulacro: Error generating feedback for question', result.questionId, error)
+          return { questionId: result.questionId, feedback: null, error: true }
+        }
+      })
+
+      // Wait for all feedbacks to complete (use Promise.allSettled to handle errors gracefully)
+      const feedbackResults = await Promise.allSettled(feedbackPromises)
+      
+      const successfulFeedbacks = feedbackResults
+        .filter((result): result is PromiseFulfilledResult<{ questionId: string; feedback: any; error: boolean }> => 
+          result.status === 'fulfilled' && result.value.feedback !== null
+        )
+        .map(result => result.value)
+
+      console.log('Simulacro: Successfully generated', successfulFeedbacks.length, 'feedbacks out of', feedbackResults.length)
+
+    } catch (error) {
+      console.error('Simulacro: Error generating feedbacks:', error)
+    } finally {
+      console.log('Simulacro: Feedback generation completed, setting loadingFeedbacks to false')
+      setLoadingFeedbacks(false)
+      // Ensure progress is at 100% when done
+      setFeedbackProgress(prev => ({
+        ...prev,
+        completed: prev.total
+      }))
+    }
+  }
+
+  const updateReasoningFeedback = async (attemptId: string, feedback: {
+    technique1Feedback: string
+    technique2Feedback: string
+    overallFeedback: string
+  }) => {
+    try {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from('feynman_reasonings')
+        .update({
+          technique_1_feedback: feedback.technique1Feedback,
+          technique_2_feedback: feedback.technique2Feedback,
+          ai_feedback: feedback.overallFeedback,
+        })
+        .eq('attempt_id', attemptId)
+        .select()
+      
+      if (error) {
+        console.error('Simulacro: Error updating reasoning feedback:', error)
+        console.error('Simulacro: Attempt ID:', attemptId)
+        console.error('Simulacro: Feedback data:', feedback)
+      } else {
+        console.log('Simulacro: Successfully updated reasoning feedback for attempt:', attemptId)
+        console.log('Simulacro: Updated rows:', data?.length || 0)
+      }
+    } catch (error) {
+      console.error('Simulacro: Exception updating reasoning feedback:', error)
+      console.error('Simulacro: Attempt ID:', attemptId)
     }
   }
 
@@ -597,6 +841,33 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
                   onChange={(e) => setQuestionsPerSubtopic(parseInt(e.target.value) || 4)}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-pink-500 focus:ring-2 focus:ring-pink-200 transition-all duration-200 bg-white font-bold text-gray-900"
                 />
+              </div>
+            </div>
+
+            {/* Feynman Modificado Toggle */}
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border-l-4 border-indigo-500 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <span className="text-indigo-500 text-xl">🧠</span> Feynman Modificado
+                  </label>
+                  <p className="text-xs text-gray-600">
+                    Explica tu razonamiento para cada pregunta y recibe feedback de IA basado en técnicas de estudio avanzadas
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFeynmanEnabled(!feynmanEnabled)}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                    feynmanEnabled ? 'bg-indigo-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-200 ${
+                      feynmanEnabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
 
@@ -923,9 +1194,29 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
                 })}
               </div>
 
+              {feynmanEnabled && (
+                <div className="mt-6">
+                  <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                    <span className="text-indigo-500 text-xl">🧠</span> Explica tu razonamiento <span className="text-red-500">*</span>
+                  </label>
+                  <textarea
+                    value={reasonings[currentQuestion.id] || ''}
+                    onChange={(e) => setReasonings(prev => ({ ...prev, [currentQuestion.id]: e.target.value }))}
+                    placeholder="Explica por qué seleccionaste esta respuesta. Describe tu proceso de razonamiento..."
+                    required={feynmanEnabled}
+                    minLength={20}
+                    rows={5}
+                    className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 bg-white font-medium text-gray-900 resize-none"
+                  />
+                  <p className="text-xs text-gray-500 mt-2">
+                    Mínimo 20 caracteres. Sé específico sobre tu razonamiento.
+                  </p>
+                </div>
+              )}
+
               <button
                 type="submit"
-                disabled={!selectedOption}
+                disabled={!selectedOption || (feynmanEnabled && (!reasonings[currentQuestion.id] || reasonings[currentQuestion.id].length < 20))}
                 className="w-full bg-gradient-to-r from-purple-600 to-pink-600 text-white py-4 px-6 rounded-xl font-bold hover:from-purple-700 hover:to-pink-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
               >
                 ✉️ Enviar Respuesta
@@ -945,7 +1236,7 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
     return (
       <main className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 p-6 md:p-8">
         <div className="max-w-4xl mx-auto">
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 p-12 text-center">
+          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 p-12 text-center mb-6">
             <div className="text-6xl mb-6">🎉</div>
             <h1 className="text-4xl font-extrabold bg-gradient-to-r from-purple-600 via-pink-600 to-red-600 bg-clip-text text-transparent mb-8">
               Simulacro Completado
@@ -979,6 +1270,152 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
               </Link>
             </div>
           </div>
+
+          {/* Feynman Feedback Section */}
+          {feynmanEnabled && (
+            <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-2xl border border-white/20 p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                  🧠
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">
+                    Feedback Feynman Modificado
+                  </h2>
+                  <p className="text-gray-600 text-sm mt-1">
+                    Análisis de tu razonamiento usando técnicas avanzadas de estudio
+                  </p>
+                  {/* Debug info */}
+                  {process.env.NODE_ENV === 'development' && (
+                    <p className="text-xs text-gray-400 mt-1">
+                      Loading: {loadingFeedbacks ? 'true' : 'false'} | Feedbacks: {Object.keys(feynmanFeedbacks).length}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {loadingFeedbacks && Object.keys(feynmanFeedbacks).length === 0 ? (
+                <div className="text-center py-12">
+                  <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                  <p className="text-gray-600 font-medium">Generando feedback de IA...</p>
+                  {feedbackProgress.total > 0 && (
+                    <div className="mt-4 max-w-md mx-auto">
+                      <div className="flex justify-between text-sm text-gray-600 mb-2">
+                        <span>Progreso</span>
+                        <span className="font-bold text-indigo-600">
+                          {Math.round((feedbackProgress.completed / feedbackProgress.total) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-indigo-500 to-purple-600 h-3 rounded-full transition-all duration-300 shadow-md"
+                          style={{ width: `${Math.min(100, (feedbackProgress.completed / feedbackProgress.total) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        {feedbackProgress.completed} de {feedbackProgress.total} feedbacks generados
+                      </p>
+                    </div>
+                  )}
+                  <p className="text-sm text-gray-500 mt-4">Esto puede tardar unos momentos</p>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {/* Progress indicator when loading and some feedbacks are ready */}
+                  {loadingFeedbacks && feedbackProgress.total > 0 && (
+                    <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-semibold text-gray-700">Generando feedbacks restantes...</span>
+                        <span className="text-sm font-bold text-indigo-600">
+                          {Math.round((feedbackProgress.completed / feedbackProgress.total) * 100)}%
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="bg-gradient-to-r from-indigo-500 to-purple-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, (feedbackProgress.completed / feedbackProgress.total) * 100)}%` }}
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        {feedbackProgress.completed} de {feedbackProgress.total} completados
+                      </p>
+                    </div>
+                  )}
+                  {results.map((result, index) => {
+                    const question = questions.find(q => q.id === result.questionId)
+                    const reasoning = reasonings[result.questionId]
+                    const feedback = feynmanFeedbacks[result.questionId]
+
+                    if (!question || !reasoning) return null
+
+                    return (
+                      <div
+                        key={result.questionId}
+                        className="border-2 border-gray-200 rounded-xl p-6 bg-gradient-to-br from-gray-50 to-white"
+                      >
+                        <div className="flex items-start justify-between mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <span className="px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full font-bold text-sm">
+                                Pregunta {index + 1}
+                              </span>
+                              <span className={`px-3 py-1 rounded-full font-bold text-sm ${
+                                result.isCorrect
+                                  ? 'bg-green-100 text-green-700'
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                                {result.isCorrect ? '✓ Correcta' : '✗ Incorrecta'}
+                              </span>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 mb-2">
+                              {question.prompt}
+                            </h3>
+                            <div className="text-sm text-gray-600 mb-4">
+                              <p><strong>Tu respuesta:</strong> {result.userAnswer}</p>
+                              <p><strong>Respuesta correcta:</strong> {question.answer_key}</p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="bg-white rounded-lg p-4 mb-4 border border-gray-200">
+                          <p className="text-sm font-semibold text-gray-700 mb-2">Tu razonamiento:</p>
+                          <p className="text-gray-800 italic">{reasoning}</p>
+                        </div>
+
+                        {feedback && feedback.technique1Feedback && feedback.technique2Feedback && feedback.overallFeedback ? (
+                          <div className="space-y-4">
+                            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-4 border-l-4 border-blue-500">
+                              <p className="text-sm font-bold text-blue-700 mb-2">
+                                Técnica 1: Descarte de Primeros Principios
+                              </p>
+                              <p className="text-gray-800">{feedback.technique1Feedback}</p>
+                            </div>
+                            <div className="bg-gradient-to-r from-purple-50 to-pink-50 rounded-lg p-4 border-l-4 border-purple-500">
+                              <p className="text-sm font-bold text-purple-700 mb-2">
+                                Técnica 2: Reverse Engineering del Error
+                              </p>
+                              <p className="text-gray-800">{feedback.technique2Feedback}</p>
+                            </div>
+                            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg p-4 border-l-4 border-indigo-500">
+                              <p className="text-sm font-bold text-indigo-700 mb-2">
+                                Resumen y Recomendaciones
+                              </p>
+                              <p className="text-gray-800">{feedback.overallFeedback}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="text-center py-4 text-gray-500">
+                            <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-indigo-600 mb-2"></div>
+                            <p className="text-sm">Generando feedback para esta pregunta...</p>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </main>
     )
