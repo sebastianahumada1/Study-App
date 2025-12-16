@@ -29,6 +29,7 @@ const nextConfig = {
     config.ignoreWarnings = [
       { module: /node_modules\/@supabase\/supabase-js\/dist\/esm\/wrapper\.mjs/ },
       { message: /does not contain a default export/ },
+      { message: /The "middleware" file convention is deprecated/ }, // Ignore middleware warning
     ]
 
     return config
