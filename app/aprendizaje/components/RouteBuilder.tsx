@@ -51,6 +51,19 @@ type RouteBuilderProps = {
   onRouteSelect: (routeId: string) => void
 }
 
+// Helper function to calculate total time for a topic (sum of all subtopics)
+const calculateTopicTime = (item: RouteItem): number => {
+  if (item.item_type === 'subtopic') {
+    return item.estimated_time
+  }
+  
+  if (item.item_type === 'topic' && item.children && item.children.length > 0) {
+    return item.children.reduce((sum, child) => sum + calculateTopicTime(child), 0)
+  }
+  
+  return item.estimated_time
+}
+
 function RouteItemTree({ 
   item, 
   level = 0, 
@@ -70,6 +83,11 @@ function RouteItemTree({
   const displayName = item.custom_name || 'Sin nombre'
   const hasChildren = item.children && item.children.length > 0
   const hasContent = (item.item_type === 'topic' || item.item_type === 'subtopic') && item.content
+  
+  // Calculate displayed time: for topics, sum of subtopics; for subtopics, use their own time
+  const displayedTime = item.item_type === 'topic' && hasChildren 
+    ? calculateTopicTime(item)
+    : item.estimated_time
 
   return (
     <div className="mb-3">
@@ -106,7 +124,12 @@ function RouteItemTree({
               </span>
             </div>
             <div className="flex flex-wrap gap-3 text-sm">
-              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg font-medium">⏱️ {item.estimated_time} min</span>
+              <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-lg font-medium">
+                ⏱️ {displayedTime} min
+                {item.item_type === 'topic' && hasChildren && (
+                  <span className="text-xs text-gray-500 ml-1">(suma de subtemas)</span>
+                )}
+              </span>
               {item.item_type === 'topic' && (
                 <>
                   <span className="px-2 py-1 bg-yellow-100 text-yellow-700 rounded-lg font-medium">⭐ {item.priority}/5</span>
@@ -180,9 +203,19 @@ export default function RouteBuilder({ userId, routes: initialRoutes, onRouteSel
   const routeIdFromQuery = searchParams.get('routeId')
   const [routes, setRoutes] = useState<Route[]>(initialRoutes)
   
-  // Update routes when initialRoutes changes
+  // Update routes when initialRoutes changes (after server refresh)
   useEffect(() => {
     setRoutes(initialRoutes)
+    // If a route was selected, update it with fresh data
+    if (selectedRoute) {
+      const updatedRoute = initialRoutes.find(r => r.id === selectedRoute.id)
+      if (updatedRoute) {
+        setSelectedRoute(updatedRoute)
+      } else {
+        // Route was deleted, clear selection
+        setSelectedRoute(null)
+      }
+    }
   }, [initialRoutes])
   
   const [selectedRoute, setSelectedRoute] = useState<Route | null>(null)
@@ -770,8 +803,23 @@ export default function RouteBuilder({ userId, routes: initialRoutes, onRouteSel
     }
   }
 
+  // Helper function to recursively remove item and its children from items array
+  const removeItemRecursively = (items: RouteItem[], itemId: string): RouteItem[] => {
+    return items
+      .filter(item => item.id !== itemId)
+      .map(item => {
+        if (item.children && item.children.length > 0) {
+          return {
+            ...item,
+            children: removeItemRecursively(item.children, itemId)
+          }
+        }
+        return item
+      })
+  }
+
   const handleDeleteItem = async (itemId: string) => {
-    if (!confirm('¿Estás seguro de eliminar este item?')) return
+    if (!confirm('¿Estás seguro de eliminar este item? Esto eliminará también todos los subtemas asociados.')) return
 
     try {
       const supabase = createClient()
@@ -785,10 +833,12 @@ export default function RouteBuilder({ userId, routes: initialRoutes, onRouteSel
         throw error
       }
 
+      // Update local state immediately for better UX
       if (selectedRoute) {
+        const updatedItems = removeItemRecursively(selectedRoute.items, itemId)
         const updatedRoute = {
           ...selectedRoute,
-          items: selectedRoute.items.filter(i => i.id !== itemId),
+          items: updatedItems,
         }
         setSelectedRoute(updatedRoute)
         
@@ -798,7 +848,8 @@ export default function RouteBuilder({ userId, routes: initialRoutes, onRouteSel
         ))
       }
       
-      router.refresh() // Refresh to get updated data from server
+      // Refresh data from server to ensure consistency
+      router.refresh()
     } catch (error: any) {
       console.error('Error deleting item:', error)
       alert(`Error al eliminar item: ${error.message || 'Error desconocido'}`)
@@ -830,7 +881,10 @@ export default function RouteBuilder({ userId, routes: initialRoutes, onRouteSel
         return
       }
 
-      // Update local state
+      // Refresh data from server to get updated structure
+      router.refresh()
+      
+      // Update local state immediately for better UX
       const updatedRoutes = routes.filter(r => r.id !== routeId)
       setRoutes(updatedRoutes)
       
