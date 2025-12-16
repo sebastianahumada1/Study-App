@@ -30,7 +30,7 @@ export default function AuthPage() {
         const { data: { session } } = await supabase.auth.getSession()
         
         if (session) {
-          router.push('/study')
+          router.push('/dashboard')
           return
         }
       } catch (error) {
@@ -94,7 +94,7 @@ export default function AuthPage() {
           })
           // Wait a moment for session to be set
           await new Promise(resolve => setTimeout(resolve, 500))
-          router.push('/study')
+          router.push('/dashboard')
           router.refresh()
           return
         } else {
@@ -127,7 +127,7 @@ export default function AuthPage() {
           })
           // Wait a moment for session to be set in cookies
           await new Promise(resolve => setTimeout(resolve, 500))
-          router.push('/study')
+          router.push('/dashboard')
           router.refresh()
           return
         } else {

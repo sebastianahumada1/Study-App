@@ -23,7 +23,7 @@ export default function DashboardClient({
         <div className="mb-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <h1 className="text-4xl md:text-5xl font-extrabold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-              Dashboard
+              Inicio
             </h1>
             <p className="text-gray-600 text-sm md:text-base">Resumen de tu progreso de estudio</p>
           </div>
