@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { createClient } from '@/lib/supabase/server'
 
+// Use Node.js runtime for longer timeout (necessary for OpenAI API calls)
+export const runtime = 'nodejs'
+export const maxDuration = 30 // 30 seconds timeout for Vercel Pro, 10 for Hobby
+
 const generateRouteSchema = z.object({
   objective: z.string().min(10, 'El objetivo debe tener al menos 10 caracteres'),
   userId: z.string().uuid(),

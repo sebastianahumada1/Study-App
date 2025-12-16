@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 
+// Use Node.js runtime for longer timeout (necessary for OpenAI API calls)
+export const runtime = 'nodejs'
+export const maxDuration = 30 // 30 seconds timeout for Vercel Pro, 10 for Hobby
+
 const evaluateFeynmanSchema = z.object({
   questionPrompt: z.string().min(1, 'El prompt de la pregunta es requerido'),
   userAnswer: z.string().min(1, 'La respuesta del usuario es requerida'),
