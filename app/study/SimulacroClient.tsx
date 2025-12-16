@@ -496,7 +496,7 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
                 href="/dashboard"
                 className="px-4 py-2 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 hover:shadow-md transition-all duration-200 border border-indigo-100"
               >
-                📊 Dashboard
+                🏠 Inicio
               </Link>
               <LogoutButton />
             </div>
@@ -975,7 +975,7 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
                 href="/dashboard"
                 className="bg-gradient-to-r from-gray-200 to-gray-300 text-gray-800 px-8 py-4 rounded-xl font-bold hover:from-gray-300 hover:to-gray-400 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
               >
-                🏠 Volver al Dashboard
+                🏠 Volver al Inicio
               </Link>
             </div>
           </div>

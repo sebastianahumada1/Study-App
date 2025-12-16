@@ -25,7 +25,7 @@ export default function ProfileClient({ userId, email, metadata }: ProfileClient
               href="/dashboard"
               className="px-4 py-2 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 hover:shadow-md transition-all duration-200 border border-indigo-100"
             >
-              📊 Dashboard
+              🏠 Inicio
             </Link>
             <LogoutButton />
           </div>

@@ -63,6 +63,18 @@ export default function BancoPreguntasClient({ questions: initialQuestions, rout
   const [csvPreview, setCsvPreview] = useState<any[]>([])
   const [csvUploading, setCsvUploading] = useState(false)
   const [csvResults, setCsvResults] = useState<{ success: number; errors: Array<{ row: number; error: string }> } | null>(null)
+  
+  // AI Generation states
+  const [showAIModal, setShowAIModal] = useState(false)
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [numberOfQuestions, setNumberOfQuestions] = useState(5)
+  const [aiDifficulty, setAiDifficulty] = useState<'baja' | 'media' | 'alta'>('media')
+  const [generatedQuestions, setGeneratedQuestions] = useState<Array<{
+    prompt: string
+    options: string[]
+    answer_key: string
+    explanation: string
+  }>>([])
 
   // Get selected route
   const selectedRoute = routes.find(r => r.id === selectedRouteId)
@@ -490,6 +502,115 @@ export default function BancoPreguntasClient({ questions: initialQuestions, rout
     setFormData({ ...formData, options: newOptions })
   }
 
+  // Get selected subtopic info from filters
+  const getSelectedSubtopicInfo = () => {
+    if (!filterRouteId || !filterTopicId || !filterSubtopicName) return null
+    
+    const route = routes.find(r => r.id === filterRouteId)
+    if (!route) return null
+    
+    const topic = route.items.find(item => item.id === filterTopicId && item.item_type === 'topic')
+    if (!topic || !topic.children) return null
+    
+    const subtopic = topic.children.find(
+      (child: any) => child.item_type === 'subtopic' && child.custom_name === filterSubtopicName
+    )
+    
+    if (!subtopic) return null
+    
+    return {
+      routeName: route.name,
+      topicName: topic.custom_name || '',
+      subtopicName: filterSubtopicName,
+    }
+  }
+
+  const handleGenerateWithAI = async () => {
+    const subtopicInfo = getSelectedSubtopicInfo()
+    if (!subtopicInfo) {
+      alert('Por favor, selecciona una ruta, tema y subtema en los filtros')
+      return
+    }
+
+    if (numberOfQuestions < 1 || numberOfQuestions > 20) {
+      alert('El número de preguntas debe estar entre 1 y 20')
+      return
+    }
+
+    setIsGenerating(true)
+    setGeneratedQuestions([])
+
+    try {
+      const response = await fetch('/api/ai/generate-questions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subtopicName: subtopicInfo.subtopicName,
+          topicName: subtopicInfo.topicName,
+          numberOfQuestions,
+          difficulty: aiDifficulty,
+        }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Error al generar preguntas')
+      }
+
+      const { questions } = await response.json()
+      setGeneratedQuestions(questions)
+    } catch (error: any) {
+      console.error('Error generating questions with AI:', error)
+      alert(error.message || 'Error al generar preguntas con IA')
+    } finally {
+      setIsGenerating(false)
+    }
+  }
+
+  const handleSaveGeneratedQuestions = async () => {
+    const subtopicInfo = getSelectedSubtopicInfo()
+    if (!subtopicInfo || generatedQuestions.length === 0) return
+
+    setIsSubmitting(true)
+
+    try {
+      const supabase = createClient()
+      
+      const questionsToInsert = generatedQuestions.map(q => ({
+        prompt: q.prompt,
+        answer_key: q.answer_key,
+        explanation: q.explanation,
+        options: q.options,
+        topic_name: subtopicInfo.topicName,
+        subtopic_name: subtopicInfo.subtopicName,
+      }))
+
+      const { error } = await supabase
+        .from('questions')
+        .insert(questionsToInsert)
+
+      if (error) {
+        console.error('Error saving generated questions:', error)
+        alert('Error al guardar las preguntas generadas')
+        setIsSubmitting(false)
+        return
+      }
+
+      // Refresh page to get updated data
+      router.refresh()
+      setShowAIModal(false)
+      setGeneratedQuestions([])
+      setNumberOfQuestions(5)
+      setAiDifficulty('media')
+      alert(`Se guardaron ${generatedQuestions.length} preguntas exitosamente`)
+    } catch (error) {
+      console.error('Error:', error)
+      alert('Error al procesar las preguntas')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   // Get unique topic and subtopic names from questions
   // Filter logic
   const filteredRoute = routes.find(r => r.id === filterRouteId)
@@ -542,7 +663,7 @@ export default function BancoPreguntasClient({ questions: initialQuestions, rout
               href="/dashboard"
               className="px-4 py-2 bg-white text-indigo-600 rounded-xl font-semibold hover:bg-indigo-50 hover:shadow-md transition-all duration-200 border border-indigo-100"
             >
-              📊 Dashboard
+              🏠 Inicio
             </Link>
             <LogoutButton />
           </div>
@@ -873,13 +994,27 @@ export default function BancoPreguntasClient({ questions: initialQuestions, rout
                   }}
                   className="bg-gradient-to-r from-green-500 to-emerald-600 text-white px-5 py-3 rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
-                  📄 Cargar CSV
+                  📄 CSV
+                </button>
+                <button
+                  onClick={() => {
+                    // Check if subtopic is selected in filters
+                    if (!filterRouteId || !filterTopicId || !filterSubtopicName) {
+                      alert('Por favor, selecciona una ruta, tema y subtema en los filtros antes de generar preguntas con IA')
+                      return
+                    }
+                    setShowAIModal(true)
+                    setGeneratedQuestions([])
+                  }}
+                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                >
+                  🤖 IA
                 </button>
                 <button
                   onClick={handleAddNew}
-                  className="bg-gradient-to-r from-indigo-600 to-purple-600 text-white px-5 py-3 rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
+                  className="bg-gradient-to-r from-gray-600 to-gray-700 text-white px-5 py-3 rounded-xl font-bold hover:from-gray-700 hover:to-gray-800 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
                 >
-                  ➕ Agregar
+                  ✏️ Manual
                 </button>
               </div>
             )}
@@ -1141,6 +1276,159 @@ export default function BancoPreguntasClient({ questions: initialQuestions, rout
                 </button>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* AI Generate Questions Modal */}
+      {showAIModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-4xl w-full mx-4 border border-white/20 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-12 h-12 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
+                🤖
+              </div>
+              <div>
+                <h3 className="text-2xl font-bold text-gray-900">Generar Preguntas con IA</h3>
+                <p className="text-sm text-gray-600">
+                  {(() => {
+                    const info = getSelectedSubtopicInfo()
+                    return info 
+                      ? `${info.routeName} > ${info.topicName} > ${info.subtopicName}`
+                      : 'Selecciona un subtema en los filtros'
+                  })()}
+                </p>
+              </div>
+            </div>
+
+            {generatedQuestions.length === 0 ? (
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Número de Preguntas *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="20"
+                    value={numberOfQuestions}
+                    onChange={(e) => setNumberOfQuestions(Math.max(1, Math.min(20, parseInt(e.target.value) || 5)))}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Entre 1 y 20 preguntas</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Dificultad
+                  </label>
+                  <select
+                    value={aiDifficulty}
+                    onChange={(e) => setAiDifficulty(e.target.value as 'baja' | 'media' | 'alta')}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
+                  >
+                    <option value="baja">Baja</option>
+                    <option value="media">Media</option>
+                    <option value="alta">Alta</option>
+                  </select>
+                </div>
+                <div className="flex gap-4">
+                  <button
+                    onClick={handleGenerateWithAI}
+                    disabled={isGenerating || !getSelectedSubtopicInfo()}
+                    className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-3 px-6 rounded-xl font-bold hover:from-indigo-700 hover:to-purple-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none"
+                  >
+                    {isGenerating ? '⏳ Generando...' : '✨ Generar Preguntas'}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAIModal(false)
+                      setGeneratedQuestions([])
+                      setNumberOfQuestions(5)
+                      setAiDifficulty('media')
+                    }}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold transition-all duration-200 shadow-md hover:shadow-lg"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <p className="text-green-800 font-semibold">
+                    ✅ Se generaron {generatedQuestions.length} preguntas exitosamente
+                  </p>
+                </div>
+
+                {/* Preview of generated questions */}
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {generatedQuestions.map((q, idx) => (
+                    <div key={idx} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                      <div className="flex items-start justify-between mb-2">
+                        <span className="px-2 py-1 bg-indigo-100 text-indigo-700 rounded text-xs font-bold">
+                          Pregunta {idx + 1}
+                        </span>
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-bold">
+                          Correcta: {q.answer_key}
+                        </span>
+                      </div>
+                      <p className="font-semibold text-gray-900 mb-3">{q.prompt}</p>
+                      <div className="space-y-2 mb-3">
+                        {q.options.map((opt, optIdx) => {
+                          const letter = String.fromCharCode(65 + optIdx)
+                          return (
+                            <div
+                              key={optIdx}
+                              className={`p-2 rounded ${
+                                letter === q.answer_key
+                                  ? 'bg-green-100 border border-green-300'
+                                  : 'bg-white border border-gray-200'
+                              }`}
+                            >
+                              <span className="font-bold mr-2">{letter}:</span>
+                              {opt}
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <p className="text-sm text-gray-600 italic">💡 {q.explanation}</p>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-4 pt-4 border-t">
+                  <button
+                    onClick={handleSaveGeneratedQuestions}
+                    disabled={isSubmitting}
+                    className="flex-1 bg-gradient-to-r from-green-500 to-emerald-600 text-white py-3 px-6 rounded-xl font-bold hover:from-green-600 hover:to-emerald-700 transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:transform-none"
+                  >
+                    {isSubmitting ? '⏳ Guardando...' : `💾 Guardar ${generatedQuestions.length} Preguntas`}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setGeneratedQuestions([])
+                      setNumberOfQuestions(5)
+                    }}
+                    disabled={isSubmitting}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                  >
+                    Generar Otras
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAIModal(false)
+                      setGeneratedQuestions([])
+                      setNumberOfQuestions(5)
+                      setAiDifficulty('media')
+                    }}
+                    disabled={isSubmitting}
+                    className="px-6 py-3 bg-gray-200 text-gray-700 rounded-xl hover:bg-gray-300 font-semibold transition-all duration-200 shadow-md hover:shadow-lg disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

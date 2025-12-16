@@ -127,7 +127,7 @@ export default function StudyClient({ userId, questions, topics }: StudyClientPr
               href="/dashboard"
               className="text-indigo-600 hover:text-indigo-700 font-medium"
             >
-              Dashboard
+              Inicio
             </Link>
             <LogoutButton />
           </div>
