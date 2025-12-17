@@ -38,8 +38,8 @@ export default function DashboardClient({
           </div>
         </div>
 
-        {/* Navigation Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+        {/* First Row: Aprendizaje, Banco de Preguntas, Simulacro, Tutor IA */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
           <Link
             href="/aprendizaje"
             className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-indigo-500 transform hover:-translate-y-1 group"
@@ -86,6 +86,24 @@ export default function DashboardClient({
           </Link>
 
           <Link
+            href="/tutor"
+            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-blue-500 transform hover:-translate-y-1 group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                <span className="text-3xl">👨‍🏫</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">Tutor IA</h3>
+                <p className="text-sm text-gray-600">Aprende con tutoría personalizada</p>
+              </div>
+            </div>
+          </Link>
+        </div>
+
+        {/* Second Row: Dashboard de Errores, Codificación del Error */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <Link
             href="/dashboard-errores"
             className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-red-500 transform hover:-translate-y-1 group"
           >
@@ -96,21 +114,6 @@ export default function DashboardClient({
               <div>
                 <h3 className="font-bold text-gray-900 text-lg">Dashboard de Errores</h3>
                 <p className="text-sm text-gray-600">Revisa tus errores</p>
-              </div>
-            </div>
-          </Link>
-
-          <Link
-            href="/reportes"
-            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-indigo-500 transform hover:-translate-y-1 group"
-          >
-            <div className="flex items-center gap-4">
-              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-4 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
-                <span className="text-3xl">📈</span>
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-900 text-lg">Reportes</h3>
-                <p className="text-sm text-gray-600">Estadísticas de precisión</p>
               </div>
             </div>
           </Link>
@@ -129,67 +132,68 @@ export default function DashboardClient({
               </div>
             </div>
           </Link>
+        </div>
 
+        {/* Third Row: Reportes and Stats Summary (smaller) */}
+        <div className="flex flex-wrap gap-4 mb-8">
           <Link
-            href="/tutor"
-            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-blue-500 transform hover:-translate-y-1 group"
+            href="/reportes"
+            className="flex-1 min-w-[200px] bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-4 hover:shadow-xl transition-all duration-300 border-l-4 border-indigo-400 hover:border-indigo-500 transform hover:-translate-y-1 group"
           >
-            <div className="flex items-center gap-4">
-              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
-                <span className="text-3xl">👨‍🏫</span>
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 p-3 rounded-lg shadow-md group-hover:scale-110 transition-transform duration-300">
+                <span className="text-2xl">📈</span>
               </div>
               <div>
-                <h3 className="font-bold text-gray-900 text-lg">Tutor IA</h3>
-                <p className="text-sm text-gray-600">Aprende con tutoría personalizada</p>
+                <h3 className="font-bold text-gray-900 text-base">Reportes</h3>
+                <p className="text-xs text-gray-600">Estadísticas de precisión</p>
               </div>
             </div>
           </Link>
-        </div>
 
-        {/* Overall Stats */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-l-4 border-gray-400 hover:border-indigo-500 transition-all duration-300 transform hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+          {/* Smaller Stats Cards */}
+          <div className="flex-1 min-w-[150px] bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-4 border-l-4 border-gray-400 hover:border-indigo-500 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
                 Total Intentos
               </h3>
-              <span className="text-2xl">📈</span>
+              <span className="text-lg">📈</span>
             </div>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">{totalAttempts}</p>
+            <p className="text-2xl font-extrabold bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">{totalAttempts}</p>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-l-4 border-green-400 hover:border-green-500 transition-all duration-300 transform hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+          <div className="flex-1 min-w-[150px] bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-4 border-l-4 border-green-400 hover:border-green-500 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
                 Correctas
               </h3>
-              <span className="text-2xl">✅</span>
+              <span className="text-lg">✅</span>
             </div>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
+            <p className="text-2xl font-extrabold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent">
               {correctAttempts}
             </p>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-l-4 border-red-400 hover:border-red-500 transition-all duration-300 transform hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+          <div className="flex-1 min-w-[150px] bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-4 border-l-4 border-red-400 hover:border-red-500 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
                 Incorrectas
               </h3>
-              <span className="text-2xl">❌</span>
+              <span className="text-lg">❌</span>
             </div>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-red-600 to-pink-600 bg-clip-text text-transparent">
+            <p className="text-2xl font-extrabold bg-gradient-to-r from-red-600 to-pink-600 bg-clip-text text-transparent">
               {incorrectAttempts}
             </p>
           </div>
 
-          <div className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 border-l-4 border-indigo-400 hover:border-indigo-500 transition-all duration-300 transform hover:-translate-y-1">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-gray-600 uppercase tracking-wide">
+          <div className="flex-1 min-w-[150px] bg-white/90 backdrop-blur-sm rounded-xl shadow-lg p-4 border-l-4 border-indigo-400 hover:border-indigo-500 transition-all duration-300">
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
                 Precisión
               </h3>
-              <span className="text-2xl">🎯</span>
+              <span className="text-lg">🎯</span>
             </div>
-            <p className="text-4xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">{accuracy}%</p>
+            <p className="text-2xl font-extrabold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">{accuracy}%</p>
           </div>
         </div>
 
