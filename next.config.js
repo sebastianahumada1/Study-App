@@ -7,6 +7,9 @@ const nextConfig = {
   outputFileTracingRoot: path.join(__dirname),
   // Transpile Supabase packages to handle ESM correctly
   transpilePackages: ['@supabase/ssr', '@supabase/supabase-js'],
+  // Turbopack config (empty to silence warning in dev mode)
+  // Vercel uses webpack via --webpack flag in build script, so this won't affect production
+  turbopack: {},
   // Don't mark supabase packages as external - let webpack bundle them with our alias config
   // Use webpack for build (Turbopack is default in dev mode)
   webpack: (config, { isServer }) => {
