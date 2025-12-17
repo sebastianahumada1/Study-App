@@ -74,6 +74,7 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
   }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feynmanEnabled, setFeynmanEnabled] = useState(false)
+  const [interleavingEnabled, setInterleavingEnabled] = useState(false)
   const [reasonings, setReasonings] = useState<Record<string, string>>({})
   const [feynmanFeedbacks, setFeynmanFeedbacks] = useState<Record<string, {
     technique1Feedback: string
@@ -354,8 +355,42 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
         return
       }
 
-      // Shuffle questions (especially important for interleaving)
-      const shuffled = [...allQuestions].sort(() => Math.random() - 0.5)
+      // Interleave questions by topic/subtopic if interleaving is enabled
+      let shuffled: Question[]
+      if (interleavingEnabled) {
+        // Group questions by topic_name (or subtopic_name if topic is null)
+        const questionsByTopic = new Map<string, Question[]>()
+        allQuestions.forEach(q => {
+          const key = q.topic_name || 'Sin tema'
+          if (!questionsByTopic.has(key)) {
+            questionsByTopic.set(key, [])
+          }
+          questionsByTopic.get(key)!.push(q)
+        })
+
+        // Shuffle questions within each topic first
+        questionsByTopic.forEach((topicQuestions) => {
+          topicQuestions.sort(() => Math.random() - 0.5)
+        })
+
+        // Interleave questions from different topics (round-robin style)
+        const interleaved: Question[] = []
+        const topicArrays = Array.from(questionsByTopic.values())
+        const maxLength = Math.max(...topicArrays.map(arr => arr.length))
+
+        for (let i = 0; i < maxLength; i++) {
+          topicArrays.forEach(topicQuestions => {
+            if (i < topicQuestions.length) {
+              interleaved.push(topicQuestions[i])
+            }
+          })
+        }
+
+        shuffled = interleaved
+      } else {
+        // Regular shuffle (completely random)
+        shuffled = [...allQuestions].sort(() => Math.random() - 0.5)
+      }
       
       // Generate session ID
       const newSessionId = crypto.randomUUID()
@@ -371,6 +406,7 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
       setAttemptIds({})
       setLoadingFeedbacks(false)
       setFeedbackProgress({ completed: 0, total: 0 })
+      // Note: interleavingEnabled state persists across simulacros
     } catch (error) {
       console.error('Simulacro: Error starting:', error)
       alert('Error al iniciar el simulacro')
@@ -845,7 +881,7 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
             </div>
 
             {/* Feynman Modificado Toggle */}
-            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border-l-4 border-indigo-500 mb-6">
+            <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl p-5 border-l-4 border-indigo-500 mb-4">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
                   <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
@@ -865,6 +901,33 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
                   <span
                     className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-200 ${
                       feynmanEnabled ? 'translate-x-7' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Interleaving Toggle */}
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-5 border-l-4 border-green-500 mb-6">
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <span className="text-green-600 text-xl">🔄</span> Interleaving
+                  </label>
+                  <p className="text-xs text-gray-600">
+                    Mezcla las preguntas intercalando temas diferentes para mejorar el aprendizaje y la retención
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setInterleavingEnabled(!interleavingEnabled)}
+                  className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2 ${
+                    interleavingEnabled ? 'bg-green-600' : 'bg-gray-300'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform duration-200 ${
+                      interleavingEnabled ? 'translate-x-7' : 'translate-x-1'
                     }`}
                   />
                 </button>
