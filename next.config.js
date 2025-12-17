@@ -5,11 +5,9 @@ const nextConfig = {
   reactStrictMode: true,
   // Set output file tracing root to current directory
   outputFileTracingRoot: path.join(__dirname),
-  // Transpile Supabase packages
-  transpilePackages: ['@supabase/ssr'],
-  // External packages for server-side rendering - use CommonJS version
-  // Note: @supabase/ssr is in transpilePackages, so don't include it here
-  serverExternalPackages: ['@supabase/supabase-js'],
+  // Transpile Supabase packages to handle ESM correctly
+  transpilePackages: ['@supabase/ssr', '@supabase/supabase-js'],
+  // Don't mark supabase packages as external - let webpack bundle them with our alias config
   // Use webpack for build (Turbopack is default in dev mode)
   webpack: (config, { isServer }) => {
     // Fix for Supabase ESM modules
@@ -20,10 +18,11 @@ const nextConfig = {
     
     // Prefer CommonJS over ESM for Supabase in server-side
     if (isServer) {
+      // Force use of main (CommonJS) build instead of module (ESM)
+      // This prevents Vercel from using the ESM module which causes "Cannot use import statement outside a module"
+      const existingAlias = config.resolve.alias || {}
       config.resolve.alias = {
-        ...config.resolve.alias,
-        // Force use of main (CommonJS) build instead of module (ESM)
-        // This prevents Vercel from using the ESM module which causes "Cannot use import statement outside a module"
+        ...existingAlias,
         '@supabase/supabase-js': path.resolve(
           __dirname,
           'node_modules/@supabase/supabase-js/dist/main/index.js'
@@ -31,7 +30,7 @@ const nextConfig = {
       }
       
       // Also configure resolve.mainFields to prefer 'main' over 'module'
-      config.resolve.mainFields = ['main', 'module']
+      config.resolve.mainFields = ['main']
     }
     
     // Handle ESM modules from Supabase
