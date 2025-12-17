@@ -114,7 +114,7 @@ export default function CodificacionErrorClient({ userId, initialQuestions, tipo
       })
 
       const subtopicNames = Array.from(selectedSubtopics).join(', ')
-      const errorType = currentTipo === 'errores-conocimiento' ? 'Errores de conocimiento' : 'Errores de análisis'
+      const errorType = currentTipo === 'errores-conocimiento' ? 'Conocimiento' : 'Análisis'
       const tutorRoleSuffix = currentTipo === 'errores-conocimiento' 
         ? 'Refuerzo de conocimientos' 
         : 'Desarrollo de análisis'

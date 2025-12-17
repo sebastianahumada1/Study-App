@@ -95,7 +95,7 @@ export default async function CodificacionErrorPage({ searchParams }: Codificaci
 
   // Handle "Errores de conocimiento" and "Errores de análisis"
   if (tipo === 'errores-conocimiento' || tipo === 'errores-analisis') {
-    const errorType = tipo === 'errores-conocimiento' ? 'Errores de conocimiento' : 'Errores de análisis'
+    const errorType = tipo === 'errores-conocimiento' ? 'Conocimiento' : 'Análisis'
 
     const { data: attempts, error: attemptsError } = await supabase
       .from('attempts')

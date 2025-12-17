@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     
     if (errorContext) {
       const errorType = errorContext.errorType
-      const isConocimiento = errorType === 'Errores de conocimiento'
+      const isConocimiento = errorType === 'Conocimiento' || errorType === 'Errores de conocimiento'
       
       // Build detailed error list
       const errorsList = errorContext.errors.map((err, idx) => 
