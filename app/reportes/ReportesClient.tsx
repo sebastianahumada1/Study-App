@@ -36,6 +36,16 @@ type SegmentStats = {
   children?: SegmentStats[]
 }
 
+// Helper function to get local date string (YYYY-MM-DD) from ISO string
+// This avoids UTC timezone issues by using local date components
+const getLocalDateString = (isoString: string): string => {
+  const date = new Date(isoString)
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
 export default function ReportesClient({ attempts }: ReportesClientProps) {
   const [reportType, setReportType] = useState<ReportType>('by-date')
 
@@ -44,7 +54,8 @@ export default function ReportesClient({ attempts }: ReportesClientProps) {
     const dateGroups = new Map<string, { total: number; correct: number }>()
 
     attempts.forEach(attempt => {
-      const date = new Date(attempt.created_at).toISOString().split('T')[0] // YYYY-MM-DD
+      // Use local date string to avoid UTC timezone issues
+      const date = getLocalDateString(attempt.created_at)
       const existing = dateGroups.get(date) || { total: 0, correct: 0 }
       dateGroups.set(date, {
         total: existing.total + 1,
