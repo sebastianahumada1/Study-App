@@ -695,56 +695,6 @@ vi. ¿Cuál sería tu plan de acción en un futuro para lidiar con situaciones s
                 </div>
               )}
 
-              {/* User Answer (if not in options) */}
-              {/* Show user answer if it's in letter format or not in options */}
-              {selectedAttempt.user_answer && (() => {
-                const userAnswer = selectedAttempt.user_answer.trim()
-                const isLetter = userAnswer.length === 1 && /^[A-Da-d]$/.test(userAnswer)
-                const isInOptions = selectedAttempt.questions?.options?.includes(userAnswer)
-                
-                // Show if it's a letter (new format) or if it's not in options (legacy format that needs migration)
-                if (isLetter || !isInOptions) {
-                  // If it's a letter, find the corresponding option text
-                  let displayAnswer = userAnswer
-                  if (isLetter && selectedAttempt.questions?.options) {
-                    const letterIndex = userAnswer.toUpperCase().charCodeAt(0) - 65
-                    if (letterIndex >= 0 && letterIndex < selectedAttempt.questions.options.length) {
-                      displayAnswer = `${userAnswer.toUpperCase()}: ${selectedAttempt.questions.options[letterIndex]}`
-                    }
-                  }
-                  
-                  return (
-                    <div className="mb-6 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-xl p-6 border-l-4 border-yellow-500">
-                      <h3 className="text-lg font-bold text-gray-900 mb-2">Tu Respuesta:</h3>
-                      <p className="text-gray-800 font-medium">{displayAnswer}</p>
-                    </div>
-                  )
-                }
-                return null
-              })()}
-
-              {/* Correct Answer */}
-              {selectedAttempt.questions?.answer_key && (() => {
-                const correctAnswer = selectedAttempt.questions.answer_key.trim()
-                const isLetter = correctAnswer.length === 1 && /^[A-Da-d]$/.test(correctAnswer)
-                const isInOptions = selectedAttempt.questions?.options?.includes(correctAnswer)
-                
-                // Always show correct answer, format it nicely
-                let displayCorrectAnswer = correctAnswer
-                if (isLetter && selectedAttempt.questions?.options) {
-                  const letterIndex = correctAnswer.toUpperCase().charCodeAt(0) - 65
-                  if (letterIndex >= 0 && letterIndex < selectedAttempt.questions.options.length) {
-                    displayCorrectAnswer = `${correctAnswer.toUpperCase()}: ${selectedAttempt.questions.options[letterIndex]}`
-                  }
-                }
-                
-                return (
-                  <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded-xl p-6 border-l-4 border-green-500">
-                    <h3 className="text-lg font-bold text-gray-900 mb-2">Respuesta Correcta:</h3>
-                    <p className="text-gray-800 font-medium">{displayCorrectAnswer}</p>
-                  </div>
-                )
-              })()}
             </div>
           </div>
         )}
