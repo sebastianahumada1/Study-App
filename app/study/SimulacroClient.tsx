@@ -40,13 +40,8 @@ type SimulacroClientProps = {
 }
 
 type SimulacroState = 'selection' | 'running' | 'completed'
-type SimulacroMode = 'subtopics' | 'topics' | 'full-route' | 'interleaving'
+type SimulacroMode = 'subtopics' | 'topics' | 'full-route'
 
-type ProblematicSubtopic = {
-  subtopic_name: string
-  topic_name: string
-  error_count: number
-}
 
 export default function SimulacroClient({ userId, routes }: SimulacroClientProps) {
   const router = useRouter()
@@ -57,9 +52,6 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]) // Para modo 'topics'
   const [selectedSubtopics, setSelectedSubtopics] = useState<string[]>([])
   const [questionsPerSubtopic, setQuestionsPerSubtopic] = useState<number>(4) // Preguntas por subtema
-  const [maxSubtopicsForInterleaving, setMaxSubtopicsForInterleaving] = useState<number>(10) // Máximo de subtemas para interleaving
-  const [problematicSubtopics, setProblematicSubtopics] = useState<ProblematicSubtopic[]>([])
-  const [loadingProblematicSubtopics, setLoadingProblematicSubtopics] = useState(false)
   const [questions, setQuestions] = useState<Question[]>([])
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [selectedOption, setSelectedOption] = useState<string>('')
@@ -95,66 +87,6 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
   const selectedTopic = availableTopics.find(t => t.id === selectedTopicId)
   const availableSubtopics = selectedTopic?.children?.filter(item => item.item_type === 'subtopic') || []
 
-  // Load problematic subtopics when interleaving mode is selected
-  const loadProblematicSubtopics = async () => {
-    setLoadingProblematicSubtopics(true)
-    try {
-      const supabase = createClient()
-      
-      // Get incorrect attempts from simulacro
-      const { data: incorrectAttempts } = await supabase
-        .from('attempts')
-        .select(`
-          questions (
-            subtopic_name,
-            topic_name
-          )
-        `)
-        .eq('user_id', userId)
-        .eq('source', 'simulacro')
-        .eq('is_correct', false)
-      
-      // Group and count errors by subtopic
-      const subtopicErrors = new Map<string, { count: number; topic_name: string }>()
-      
-      incorrectAttempts?.forEach((attempt: any) => {
-        const subtopic = attempt.questions?.subtopic_name
-        const topic = attempt.questions?.topic_name
-        if (subtopic) {
-          const current = subtopicErrors.get(subtopic) || { count: 0, topic_name: topic || '' }
-          subtopicErrors.set(subtopic, { 
-            count: current.count + 1, 
-            topic_name: current.topic_name || topic || '' 
-          })
-        }
-      })
-      
-      // Sort by error count and get top N
-      const problematic: ProblematicSubtopic[] = Array.from(subtopicErrors.entries())
-        .map(([subtopic_name, data]) => ({ 
-          subtopic_name, 
-          topic_name: data.topic_name,
-          error_count: data.count 
-        }))
-        .sort((a, b) => b.error_count - a.error_count)
-        .slice(0, maxSubtopicsForInterleaving)
-      
-      setProblematicSubtopics(problematic)
-    } catch (error) {
-      console.error('Error loading problematic subtopics:', error)
-      setProblematicSubtopics([])
-    } finally {
-      setLoadingProblematicSubtopics(false)
-    }
-  }
-
-  useEffect(() => {
-    if (mode === 'interleaving') {
-      loadProblematicSubtopics()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, userId, maxSubtopicsForInterleaving])
-
   // Timer effect
   useEffect(() => {
     if (state === 'running' && timeLeft > 0) {
@@ -169,26 +101,19 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
   }, [state, timeLeft])
 
   const handleStartSimulacro = async () => {
-    if (mode === 'interleaving') {
-      if (problematicSubtopics.length === 0) {
-        alert('No se encontraron subtemas con errores. Realiza algunos simulacros primero.')
-        return
-      }
-    } else {
-      if (!selectedRouteId) {
-        alert('Selecciona una ruta')
-        return
-      }
+    if (!selectedRouteId) {
+      alert('Selecciona una ruta')
+      return
+    }
 
-      if (mode === 'subtopics' && (!selectedTopicId || (availableSubtopics.length > 0 && selectedSubtopics.length === 0))) {
-        alert('Selecciona un tema y al menos un subtema')
-        return
-      }
+    if (mode === 'subtopics' && (!selectedTopicId || (availableSubtopics.length > 0 && selectedSubtopics.length === 0))) {
+      alert('Selecciona un tema y al menos un subtema')
+      return
+    }
 
-      if (mode === 'topics' && selectedTopicIds.length === 0) {
-        alert('Selecciona al menos un tema')
-        return
-      }
+    if (mode === 'topics' && selectedTopicIds.length === 0) {
+      alert('Selecciona al menos un tema')
+      return
     }
 
     setIsSubmitting(true)
@@ -324,27 +249,6 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
             if (topicQuestions) {
               allQuestions.push(...topicQuestions)
             }
-          }
-        }
-      } else if (mode === 'interleaving') {
-        // Modo 4: Interleaving - Subtemas donde el usuario se ha equivocado
-        if (problematicSubtopics.length === 0) {
-          alert('No se encontraron subtemas con errores para generar el simulacro')
-          setIsSubmitting(false)
-          return
-        }
-
-        // Get questions from problematic subtopics
-        for (const problematic of problematicSubtopics) {
-          const { data: subtopicQuestions } = await supabase
-            .from('questions')
-            .select('id, prompt, answer_key, explanation, options, topic_name, subtopic_name')
-            .eq('topic_name', problematic.topic_name)
-            .eq('subtopic_name', problematic.subtopic_name)
-            .limit(questionsPerSubtopic)
-
-          if (subtopicQuestions) {
-            allQuestions.push(...subtopicQuestions)
           }
         }
       }
@@ -752,9 +656,6 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
     setSelectedTopicId('')
     setSelectedTopicIds([])
     setSelectedSubtopics([])
-    if (newMode === 'interleaving') {
-      loadProblematicSubtopics()
-    }
   }
 
   const currentQuestion = questions[currentQuestionIndex]
@@ -835,17 +736,6 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
                 >
                   <div className="font-bold text-gray-900 mb-1">🗺️ Ruta Completa</div>
                   <div className="text-xs text-gray-600">Evalúa toda la ruta</div>
-                </button>
-                <button
-                  onClick={() => handleModeChange('interleaving')}
-                  className={`p-4 rounded-xl border-2 transition-all duration-200 text-left ${
-                    mode === 'interleaving'
-                      ? 'border-orange-500 bg-gradient-to-r from-orange-50 to-red-50 shadow-lg'
-                      : 'border-gray-200 hover:border-orange-300 hover:bg-gray-50'
-                  }`}
-                >
-                  <div className="font-bold text-gray-900 mb-1">🔄 Interleaving</div>
-                  <div className="text-xs text-gray-600">Enfocado en tus errores</div>
                 </button>
               </div>
             </div>
@@ -934,97 +824,24 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
               </div>
             </div>
 
-            {/* Route Selection - Not required for interleaving */}
-            {mode !== 'interleaving' && (
-              <div className="mb-6">
-                <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                  <span className="text-indigo-500 text-xl">📍</span> Ruta de Estudio *
-                </label>
-                <select
-                  value={selectedRouteId}
-                  onChange={(e) => handleRouteChange(e.target.value)}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 bg-white font-medium text-gray-700 hover:border-indigo-300 cursor-pointer"
-                >
-                  <option value="">Selecciona una ruta</option>
-                  {routes.map((route) => (
-                    <option key={route.id} value={route.id}>
-                      {route.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            {/* Interleaving Mode - Show problematic subtopics */}
-            {mode === 'interleaving' && (
-              <>
-                <div className="mb-6 bg-gradient-to-r from-orange-50 to-red-50 rounded-xl p-6 border-l-4 border-orange-500">
-                  <div className="flex items-center gap-3 mb-4">
-                    <div className="w-12 h-12 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                      🔄
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-bold text-gray-900">Modo Interleaving</h3>
-                      <p className="text-sm text-gray-600">Simulacro enfocado en tus áreas problemáticas</p>
-                    </div>
-                  </div>
-                  
-                  {loadingProblematicSubtopics ? (
-                    <div className="text-center py-4">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600 mx-auto"></div>
-                      <p className="text-sm text-gray-600 mt-2">Analizando tus errores...</p>
-                    </div>
-                  ) : problematicSubtopics.length === 0 ? (
-                    <div className="text-center py-4">
-                      <div className="text-4xl mb-2">📊</div>
-                      <p className="text-gray-700 font-semibold mb-2">No se encontraron errores previos</p>
-                      <p className="text-sm text-gray-600">Realiza algunos simulacros primero para que este modo pueda identificar tus áreas problemáticas.</p>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="mb-4">
-                        <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
-                          <span className="text-orange-500">📊</span> Máximo de subtemas a incluir
-                        </label>
-                        <input
-                          type="number"
-                          min="3"
-                          max="20"
-                          value={maxSubtopicsForInterleaving}
-                          onChange={(e) => {
-                            const value = parseInt(e.target.value) || 10
-                            setMaxSubtopicsForInterleaving(value)
-                            loadProblematicSubtopics()
-                          }}
-                          className="w-32 px-4 py-2 border-2 border-gray-200 rounded-xl focus:border-orange-500 focus:ring-2 focus:ring-orange-200 transition-all duration-200 bg-white font-bold text-gray-900"
-                        />
-                      </div>
-                      <div className="bg-white rounded-xl p-4 border-2 border-orange-200">
-                        <p className="text-sm font-semibold text-gray-700 mb-3">
-                          Se incluirán los <span className="text-orange-600 font-bold">{Math.min(problematicSubtopics.length, maxSubtopicsForInterleaving)}</span> subtemas con más errores:
-                        </p>
-                        <div className="space-y-2 max-h-48 overflow-y-auto">
-                          {problematicSubtopics.slice(0, maxSubtopicsForInterleaving).map((item, idx) => (
-                            <div key={idx} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                              <div className="flex items-center gap-2">
-                                <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded-lg font-bold text-xs">
-                                  #{idx + 1}
-                                </span>
-                                <span className="font-medium text-gray-900">{item.subtopic_name}</span>
-                                <span className="text-xs text-gray-500">({item.topic_name})</span>
-                              </div>
-                              <span className="px-2 py-1 bg-red-100 text-red-700 rounded-lg font-bold text-xs">
-                                {item.error_count} {item.error_count === 1 ? 'error' : 'errores'}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </>
-            )}
+            {/* Route Selection */}
+            <div className="mb-6">
+              <label className="block text-sm font-bold text-gray-700 mb-3 flex items-center gap-2">
+                <span className="text-indigo-500 text-xl">📍</span> Ruta de Estudio *
+              </label>
+              <select
+                value={selectedRouteId}
+                onChange={(e) => handleRouteChange(e.target.value)}
+                className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:border-indigo-500 focus:ring-2 focus:ring-indigo-200 transition-all duration-200 bg-white font-medium text-gray-700 hover:border-indigo-300 cursor-pointer"
+              >
+                <option value="">Selecciona una ruta</option>
+                {routes.map((route) => (
+                  <option key={route.id} value={route.id}>
+                    {route.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
             {/* Mode 1: Subtemas */}
             {mode === 'subtopics' && selectedRouteId && (
@@ -1147,20 +964,14 @@ export default function SimulacroClient({ userId, routes }: SimulacroClientProps
             <button
               onClick={handleStartSimulacro}
               disabled={
-                (mode === 'interleaving' && problematicSubtopics.length === 0) ||
-                (mode !== 'interleaving' && !selectedRouteId) || 
+                !selectedRouteId || 
                 (mode === 'subtopics' && (!selectedTopicId || (availableSubtopics.length > 0 && selectedSubtopics.length === 0))) ||
                 (mode === 'topics' && selectedTopicIds.length === 0) ||
-                isSubmitting ||
-                loadingProblematicSubtopics
+                isSubmitting
               }
-              className={`mt-8 w-full py-4 px-6 rounded-xl font-bold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none ${
-                mode === 'interleaving'
-                  ? 'bg-gradient-to-r from-orange-600 to-red-600 text-white hover:from-orange-700 hover:to-red-700'
-                  : 'bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700'
-              }`}
+              className="mt-8 w-full py-4 px-6 rounded-xl font-bold transition-all duration-200 shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700"
             >
-              {isSubmitting ? '⏳ Cargando...' : mode === 'interleaving' ? '🔄 Iniciar Simulacro Interleaving' : '🚀 Iniciar Simulacro'}
+              {isSubmitting ? '⏳ Cargando...' : '🚀 Iniciar Simulacro'}
             </button>
           </div>
         </div>

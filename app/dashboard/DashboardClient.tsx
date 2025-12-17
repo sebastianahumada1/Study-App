@@ -114,6 +114,36 @@ export default function DashboardClient({
               </div>
             </div>
           </Link>
+
+          <Link
+            href="/codificacion-error"
+            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-orange-500 transform hover:-translate-y-1 group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-orange-500 to-red-600 p-4 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                <span className="text-3xl">🔄</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">Codificación del Error</h3>
+                <p className="text-sm text-gray-600">Refuerza errores bobos</p>
+              </div>
+            </div>
+          </Link>
+
+          <Link
+            href="/tutor"
+            className="bg-white/90 backdrop-blur-sm rounded-2xl shadow-xl p-6 hover:shadow-2xl transition-all duration-300 border-2 border-transparent hover:border-blue-500 transform hover:-translate-y-1 group"
+          >
+            <div className="flex items-center gap-4">
+              <div className="bg-gradient-to-br from-blue-500 to-indigo-600 p-4 rounded-xl shadow-lg group-hover:scale-110 transition-transform duration-300">
+                <span className="text-3xl">👨‍🏫</span>
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900 text-lg">Tutor IA</h3>
+                <p className="text-sm text-gray-600">Aprende con tutoría personalizada</p>
+              </div>
+            </div>
+          </Link>
         </div>
 
         {/* Overall Stats */}

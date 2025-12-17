@@ -115,8 +115,10 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
 
   const handleEdit = (attempt: Attempt) => {
     setEditingId(attempt.id)
+    // If the attempt is correct, automatically set error_type to "No Aplica"
+    const errorType = attempt.is_correct ? 'No Aplica' : (attempt.error_type || '')
     setEditForm({
-      error_type: attempt.error_type || '',
+      error_type: errorType,
       feedback: attempt.feedback || '',
       conclusion: attempt.conclusion || '',
     })
@@ -125,31 +127,55 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
   const handleSave = async (attemptId: string) => {
     try {
       const supabase = createClient()
-      const { error } = await supabase
+      
+      // Find the attempt to check if it's correct
+      const attempt = attempts.find(a => a.id === attemptId)
+      if (!attempt) {
+        alert('Error: No se encontró el intento')
+        return
+      }
+
+      // If the attempt is correct, force error_type to "No Aplica"
+      const errorType = attempt.is_correct ? 'No Aplica' : (editForm.error_type || null)
+      
+      const { data, error } = await supabase
         .from('attempts')
         .update({
-          error_type: editForm.error_type || null,
+          error_type: errorType,
           feedback: editForm.feedback || null,
           conclusion: editForm.conclusion || null,
         })
         .eq('id', attemptId)
+        .select()
 
       if (error) {
-        console.error('Error saving:', error)
-        alert('Error al guardar los cambios')
+        console.error('DashboardErrores: Error saving:', error)
+        alert(`Error al guardar los cambios: ${error.message}`)
+        return
+      }
+
+      if (!data || data.length === 0) {
+        console.error('DashboardErrores: No data returned from update')
+        alert('Error: No se pudo actualizar el intento')
         return
       }
 
       // Update local state
       setAttempts(attempts.map(a => 
         a.id === attemptId 
-          ? { ...a, ...editForm }
+          ? { 
+              ...a, 
+              error_type: errorType,
+              feedback: editForm.feedback || null,
+              conclusion: editForm.conclusion || null,
+            }
           : a
       ))
       setEditingId(null)
+      console.log('DashboardErrores: Successfully saved changes for attempt:', attemptId)
     } catch (error) {
-      console.error('Error:', error)
-      alert('Error al guardar los cambios')
+      console.error('DashboardErrores: Exception saving:', error)
+      alert(`Error al guardar los cambios: ${error instanceof Error ? error.message : 'Error desconocido'}`)
     }
   }
 
@@ -344,10 +370,10 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[180px] max-w-[220px]">
                       Conclusión
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[200px] max-w-[250px]">
+                    <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r w-20">
                       🧠 Razonamiento
                     </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[200px] max-w-[250px]">
+                    <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r w-20">
                       🤖 Feedback Feynman
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -391,9 +417,17 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
                         <td className="px-4 py-3 border-r">
                           {isEditing ? (
                             <select
-                              value={editForm.error_type}
-                              onChange={(e) => setEditForm({ ...editForm, error_type: e.target.value })}
-                              className="w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500"
+                              value={attempt.is_correct ? 'No Aplica' : editForm.error_type}
+                              onChange={(e) => {
+                                // If attempt is correct, don't allow changing error_type
+                                if (!attempt.is_correct) {
+                                  setEditForm({ ...editForm, error_type: e.target.value })
+                                }
+                              }}
+                              disabled={attempt.is_correct}
+                              className={`w-full px-2 py-1 border border-gray-300 rounded focus:ring-2 focus:ring-indigo-500 ${
+                                attempt.is_correct ? 'bg-gray-100 cursor-not-allowed' : ''
+                              }`}
                             >
                               <option value="">Seleccionar...</option>
                               <option value="No Aplica">No Aplica</option>
@@ -403,7 +437,7 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
                             </select>
                           ) : (
                             <span className={attempt.error_type ? '' : 'text-gray-400 italic'}>
-                              {attempt.error_type || 'Sin clasificar'}
+                              {attempt.is_correct ? 'No Aplica' : (attempt.error_type || 'Sin clasificar')}
                             </span>
                           )}
                         </td>
@@ -457,36 +491,29 @@ vi. ¿Cuál sería tu plan de acción en un futuro para lidiar con situaciones s
                             </div>
                           )}
                         </td>
-                        <td className="px-4 py-3 border-r min-w-[200px] max-w-[250px]">
-                          {attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 ? (
-                            <div className="max-h-24 overflow-y-auto text-xs">
-                              <span className="whitespace-pre-wrap break-words italic text-indigo-700">
-                                {attempt.feynman_reasonings[0].user_reasoning}
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 italic text-xs">Sin razonamiento</span>
-                          )}
+                        <td className="px-2 py-3 border-r text-center w-20">
+                          <span 
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                              attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].user_reasoning
+                                ? 'bg-green-100 text-green-600'
+                                : 'bg-gray-100 text-gray-400'
+                            }`}
+                            title={attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].user_reasoning ? 'Tiene razonamiento' : 'Sin razonamiento'}
+                          >
+                            {attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].user_reasoning ? '✓' : '✗'}
+                          </span>
                         </td>
-                        <td className="px-4 py-3 border-r min-w-[200px] max-w-[250px]">
-                          {attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].ai_feedback ? (
-                            <div className="space-y-2">
-                              <div className="max-h-16 overflow-y-auto text-xs">
-                                <p className="font-semibold text-blue-700 mb-1">Técnica 1:</p>
-                                <p className="text-gray-700 break-words">{attempt.feynman_reasonings[0].technique_1_feedback || 'N/A'}</p>
-                              </div>
-                              <div className="max-h-16 overflow-y-auto text-xs">
-                                <p className="font-semibold text-purple-700 mb-1">Técnica 2:</p>
-                                <p className="text-gray-700 break-words">{attempt.feynman_reasonings[0].technique_2_feedback || 'N/A'}</p>
-                              </div>
-                              <div className="max-h-16 overflow-y-auto text-xs">
-                                <p className="font-semibold text-indigo-700 mb-1">Resumen:</p>
-                                <p className="text-gray-700 break-words">{attempt.feynman_reasonings[0].ai_feedback}</p>
-                              </div>
-                            </div>
-                          ) : (
-                            <span className="text-gray-400 italic text-xs">Sin feedback</span>
-                          )}
+                        <td className="px-2 py-3 border-r text-center w-20">
+                          <span 
+                            className={`inline-flex items-center justify-center w-8 h-8 rounded-full ${
+                              attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].ai_feedback
+                                ? 'bg-green-100 text-green-600'
+                                : 'bg-gray-100 text-gray-400'
+                            }`}
+                            title={attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].ai_feedback ? 'Tiene feedback Feynman' : 'Sin feedback Feynman'}
+                          >
+                            {attempt.feynman_reasonings && attempt.feynman_reasonings.length > 0 && attempt.feynman_reasonings[0].ai_feedback ? '✓' : '✗'}
+                          </span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
                           {isEditing ? (
