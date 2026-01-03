@@ -43,25 +43,10 @@ export async function middleware(request: NextRequest) {
       }
     )
 
-    // Refresh session if expired - required for Server Components
-    // Add timeout to prevent middleware from blocking too long
-    // Wrap in try-catch to prevent middleware from crashing
-    try {
-      // Add a timeout of 3 seconds for the auth call to prevent middleware timeout
-      const getUserPromise = supabase.auth.getUser()
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Auth timeout')), 3000)
-      )
-      
-      await Promise.race([getUserPromise, timeoutPromise])
-    } catch (authError) {
-      // Log error but don't fail the request - timeout is acceptable
-      // Session refresh can happen in Server Components if needed
-      if (authError instanceof Error && authError.message !== 'Auth timeout') {
-        console.error('Middleware: Error refreshing auth session:', authError)
-      }
-    }
-
+    // Return response immediately - no blocking auth calls
+    // The Supabase client is created to handle cookie management
+    // Server Components will handle authentication validation when needed
+    // This prevents middleware timeout issues
     return supabaseResponse
   } catch (error) {
     // If anything fails in middleware, log it but continue with the request
