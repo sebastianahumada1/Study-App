@@ -370,10 +370,10 @@ export default function DashboardErroresClient({ attempts: initialAttempts }: Da
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider border-r min-w-[180px] max-w-[220px]">
                       Conclusión
                     </th>
-                    <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r w-20">
+                    <th className="px-2 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider border-r w-20">
                       🧠 Razonamiento
                     </th>
-                    <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-r w-20">
+                    <th className="px-2 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider border-r w-20">
                       🤖 Feedback Feynman
                     </th>
                     <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">
