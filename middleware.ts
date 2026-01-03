@@ -44,12 +44,22 @@ export async function middleware(request: NextRequest) {
     )
 
     // Refresh session if expired - required for Server Components
+    // Add timeout to prevent middleware from blocking too long
     // Wrap in try-catch to prevent middleware from crashing
     try {
-      await supabase.auth.getUser()
+      // Add a timeout of 3 seconds for the auth call to prevent middleware timeout
+      const getUserPromise = supabase.auth.getUser()
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Auth timeout')), 3000)
+      )
+      
+      await Promise.race([getUserPromise, timeoutPromise])
     } catch (authError) {
-      // Log error but don't fail the request
-      console.error('Middleware: Error refreshing auth session:', authError)
+      // Log error but don't fail the request - timeout is acceptable
+      // Session refresh can happen in Server Components if needed
+      if (authError instanceof Error && authError.message !== 'Auth timeout') {
+        console.error('Middleware: Error refreshing auth session:', authError)
+      }
     }
 
     return supabaseResponse
@@ -62,7 +72,15 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes - they handle their own auth)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - favicon.ico (favicon file)
+     * - Static files (images, etc.)
+     */
+    '/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }
 
